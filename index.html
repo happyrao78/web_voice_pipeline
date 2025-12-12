@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qplus Voice Assistant</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎤 Qplus Voice Assistant</h1>
+            <p class="subtitle">Say "Hey Qplus" to activate</p>
+        </header>
+
+        <main>
+            <!-- API Configuration Section -->
+            <section class="api-config" id="apiConfig">
+                <h2>Configuration</h2>
+                <div class="config-group">
+                    <label for="openaiKey">OpenAI API Key:</label>
+                    <input 
+                        type="password" 
+                        id="openaiKey" 
+                        placeholder="sk-..." 
+                        autocomplete="off"
+                    >
+                </div>
+                <div class="config-group">
+                    <label for="porcupineKey">Picovoice Access Key (Optional):</label>
+                    <input 
+                        type="password" 
+                        id="porcupineKey" 
+                        placeholder="For Porcupine wake word" 
+                        autocomplete="off"
+                    >
+                </div>
+                <button id="saveConfig" class="btn-secondary">Save Configuration</button>
+            </section>
+
+            <!-- Control Section -->
+            <section class="controls">
+                <button id="startBtn" class="btn-primary" disabled>
+                    <span class="btn-icon">▶</span>
+                    <span class="btn-text">Start Assistant</span>
+                </button>
+                <button id="stopBtn" class="btn-danger" disabled>
+                    <span class="btn-icon">⏹</span>
+                    <span class="btn-text">Stop Assistant</span>
+                </button>
+            </section>
+
+            <!-- Status Section -->
+            <section class="status-section">
+                <div class="status-badge" id="statusBadge">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Idle</span>
+                </div>
+                <div class="latency-indicator" id="latencyIndicator">
+                    <span class="latency-label">Latency:</span>
+                    <span class="latency-value">-- ms</span>
+                </div>
+            </section>
+
+            <!-- Transcript Section -->
+            <section class="transcript-section">
+                <h2>Transcript</h2>
+                <div class="transcript-box" id="transcriptBox">
+                    <div class="transcript-placeholder">
+                        Waiting for wake word...
+                    </div>
+                </div>
+            </section>
+
+            <!-- Response Section -->
+            <section class="response-section">
+                <h2>Assistant Response</h2>
+                <div class="response-box" id="responseBox">
+                    <div class="response-placeholder">
+                        No response yet
+                    </div>
+                </div>
+            </section>
+
+            <!-- Debug Console (Optional) -->
+            <section class="debug-section" id="debugSection" style="display: none;">
+                <h2>Debug Console</h2>
+                <div class="debug-box" id="debugBox"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Press <kbd>Ctrl+D</kbd> to toggle debug console</p>
+        </footer>
+    </div>
+
+    <!-- Load modules -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
