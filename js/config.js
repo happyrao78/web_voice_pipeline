@@ -15,11 +15,11 @@ class Config {
             bufferSize: 320 // 16000 * 0.02 = 320 samples per chunk
         };
         
-        // Latency targets
+        // Latency targets (reduced)
         this.latency = {
-            targetMs: 1200, // 1.2 seconds target
-            warningMs: 1500,
-            criticalMs: 2000
+            targetMs: 800,   // 800ms target
+            warningMs: 1200, // Warning at 1.2s
+            criticalMs: 1500 // Critical at 1.5s
         };
         
         // Wake word configuration
@@ -31,15 +31,27 @@ class Config {
         
         // WebSocket configuration
         this.websocket = {
+            url: 'ws://localhost:8080',
             reconnectAttempts: 3,
             reconnectDelayMs: 1000,
             heartbeatIntervalMs: 30000
         };
         
-        // Service providers
+        // Service providers (handled by proxy server)
         this.providers = {
-            stt: 'groq', // Groq Whisper
-            tts: 'google' // Google Wavenet
+            stt: {
+                provider: 'Groq',
+                model: 'whisper-large-v3-turbo',
+                language: 'en',
+                temperature: 0 // More deterministic
+            },
+            tts: {
+                provider: 'Google Wavenet',
+                voice: 'en-US-Wavenet-F',
+                languageCode: 'en-US',
+                speakingRate: 1.1, // Slightly faster
+                pitch: 0.0
+            }
         };
     }
     
@@ -49,6 +61,13 @@ class Config {
      */
     isConfigured() {
         return true;
+    }
+    
+    /**
+     * Get WebSocket URL for a service
+     */
+    getWebSocketURL(service) {
+        return `${this.websocket.url}?service=${service}`;
     }
 }
 

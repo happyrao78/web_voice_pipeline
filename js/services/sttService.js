@@ -1,5 +1,5 @@
 /**
- * Speech-to-Text Service
+ * Speech-to-Text Service (Optimized for Low Latency)
  * Uses Groq Whisper API via proxy
  */
 
@@ -17,9 +17,9 @@ class STTService {
         this.onFinalTranscript = null;
         this.onError = null;
         
-        // Audio buffer
-        this.audioBuffer = [];
-        this.transcriptionTimeout = null;
+        // Audio tracking
+        this.minAudioDuration = 0.5; // Minimum 0.5 seconds of audio
+        this.audioStartTime = null;
     }
     
     /**
@@ -121,24 +121,20 @@ class STTService {
             return;
         }
         
+        // Start timer on first audio chunk
+        if (!this.audioStartTime) {
+            this.audioStartTime = Date.now();
+        }
+        
         // Convert to base64
         const int16Data = new Int16Array(audioData);
         const base64Audio = this.arrayBufferToBase64(int16Data.buffer);
         
-        // Send audio chunk
+        // Send audio chunk immediately (no debouncing)
         this.send({
             type: 'audio',
             audio: base64Audio
         });
-        
-        // Debounce transcription (trigger after 500ms of silence)
-        if (this.transcriptionTimeout) {
-            clearTimeout(this.transcriptionTimeout);
-        }
-        
-        this.transcriptionTimeout = setTimeout(() => {
-            this.commitAudio();
-        }, 500);
     }
     
     /**
@@ -147,6 +143,15 @@ class STTService {
     commitAudio() {
         if (!this.isConnected || !this.ws) {
             return;
+        }
+        
+        // Check minimum duration
+        if (this.audioStartTime) {
+            const duration = (Date.now() - this.audioStartTime) / 1000;
+            if (duration < this.minAudioDuration) {
+                console.log(`⚠️ Audio too short (${duration.toFixed(2)}s), skipping transcription`);
+                return;
+            }
         }
         
         console.log('🎤 Triggering transcription...');
@@ -176,6 +181,7 @@ class STTService {
         this.onFinalTranscript = onFinal;
         this.onError = onError;
         this.isTranscribing = true;
+        this.audioStartTime = null; // Reset timer
     }
     
     /**
@@ -184,14 +190,11 @@ class STTService {
     stopTranscription() {
         this.isTranscribing = false;
         
-        // Clear timeout
-        if (this.transcriptionTimeout) {
-            clearTimeout(this.transcriptionTimeout);
-            this.transcriptionTimeout = null;
-        }
-        
-        // Final transcription
+        // Trigger final transcription
         this.commitAudio();
+        
+        // Reset timer
+        this.audioStartTime = null;
     }
     
     /**
@@ -224,11 +227,7 @@ class STTService {
         }
         this.isConnected = false;
         this.isTranscribing = false;
-        
-        if (this.transcriptionTimeout) {
-            clearTimeout(this.transcriptionTimeout);
-            this.transcriptionTimeout = null;
-        }
+        this.audioStartTime = null;
     }
     
     /**

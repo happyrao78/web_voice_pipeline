@@ -1,12 +1,13 @@
 /**
- * Knowledge Base Service
- * Handles local question-answer lookups with fuzzy matching
+ * Knowledge Base Service (Optimized)
+ * Handles local question-answer lookups with better fuzzy matching
  */
 
 class KnowledgeBase {
     constructor() {
         this.data = {};
         this.normalizedData = {};
+        this.keywords = {};
         this.isLoaded = false;
     }
     
@@ -22,14 +23,27 @@ class KnowledgeBase {
             
             this.data = await response.json();
             
-            // Create normalized version for matching
+            // Create normalized version and extract keywords
             this.normalizedData = {};
+            this.keywords = {};
+            
             for (const [key, value] of Object.entries(this.data)) {
                 const normalizedKey = this.normalize(key);
                 this.normalizedData[normalizedKey] = {
                     original: key,
                     answer: value
                 };
+                
+                // Extract keywords
+                const words = normalizedKey.split(' ');
+                for (const word of words) {
+                    if (word.length > 2) { // Skip very short words
+                        if (!this.keywords[word]) {
+                            this.keywords[word] = [];
+                        }
+                        this.keywords[word].push(normalizedKey);
+                    }
+                }
             }
             
             this.isLoaded = true;
@@ -53,26 +67,39 @@ class KnowledgeBase {
     }
     
     /**
-     * Calculate similarity between two strings (simple word overlap)
+     * Calculate similarity using Levenshtein distance
      */
-    calculateSimilarity(str1, str2) {
-        const words1 = str1.split(' ');
-        const words2 = str2.split(' ');
+    calculateLevenshtein(str1, str2) {
+        const len1 = str1.length;
+        const len2 = str2.length;
+        const matrix = [];
         
-        let matches = 0;
-        for (const word1 of words1) {
-            if (words2.includes(word1)) {
-                matches++;
+        for (let i = 0; i <= len1; i++) {
+            matrix[i] = [i];
+        }
+        
+        for (let j = 0; j <= len2; j++) {
+            matrix[0][j] = j;
+        }
+        
+        for (let i = 1; i <= len1; i++) {
+            for (let j = 1; j <= len2; j++) {
+                const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j - 1] + cost
+                );
             }
         }
         
-        // Jaccard similarity
-        const union = new Set([...words1, ...words2]).size;
-        return matches / union;
+        const distance = matrix[len1][len2];
+        const maxLen = Math.max(len1, len2);
+        return 1 - (distance / maxLen);
     }
     
     /**
-     * Find answer for a question
+     * Find answer for a question using multiple strategies
      */
     find(question) {
         if (!this.isLoaded) {
@@ -82,18 +109,56 @@ class KnowledgeBase {
         
         const normalized = this.normalize(question);
         
-        // Exact match first
+        // Strategy 1: Exact match
         if (this.normalizedData[normalized]) {
+            console.log('✓ Exact match found');
             return this.normalizedData[normalized].answer;
         }
         
-        // Fuzzy match with similarity threshold
+        // Strategy 2: Contains match
+        for (const [key, value] of Object.entries(this.normalizedData)) {
+            if (normalized.includes(key) || key.includes(normalized)) {
+                console.log('✓ Contains match found');
+                return value.answer;
+            }
+        }
+        
+        // Strategy 3: Keyword matching
+        const queryWords = normalized.split(' ').filter(w => w.length > 2);
+        const candidates = new Set();
+        
+        for (const word of queryWords) {
+            if (this.keywords[word]) {
+                this.keywords[word].forEach(key => candidates.add(key));
+            }
+        }
+        
+        if (candidates.size > 0) {
+            // Find best match among candidates
+            let bestMatch = null;
+            let bestScore = 0;
+            
+            for (const candidate of candidates) {
+                const score = this.calculateLevenshtein(normalized, candidate);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMatch = this.normalizedData[candidate].answer;
+                }
+            }
+            
+            if (bestScore > 0.4) {
+                console.log(`✓ Keyword match found (score: ${bestScore.toFixed(2)})`);
+                return bestMatch;
+            }
+        }
+        
+        // Strategy 4: Fuzzy match with all entries
         let bestMatch = null;
         let bestScore = 0;
-        const threshold = 0.3; // Minimum similarity score
+        const threshold = 0.5;
         
         for (const [key, value] of Object.entries(this.normalizedData)) {
-            const score = this.calculateSimilarity(normalized, key);
+            const score = this.calculateLevenshtein(normalized, key);
             
             if (score > bestScore && score >= threshold) {
                 bestScore = score;
@@ -102,11 +167,12 @@ class KnowledgeBase {
         }
         
         if (bestMatch) {
-            console.log(`Found match with similarity ${bestScore.toFixed(2)}`);
+            console.log(`✓ Fuzzy match found (score: ${bestScore.toFixed(2)})`);
             return bestMatch;
         }
         
         // No match found
+        console.log('✗ No match found');
         return null;
     }
     

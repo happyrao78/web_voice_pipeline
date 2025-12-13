@@ -10,7 +10,6 @@ class UIController {
         this.elements = {};
         this.debugEnabled = false;
         this.currentStatus = 'idle';
-        this.latencyStartTime = null;
     }
     
     /**
@@ -19,12 +18,6 @@ class UIController {
     initialize() {
         // Get all UI elements
         this.elements = {
-            // Config inputs
-            openaiKeyInput: document.getElementById('openaiKey'),
-            porcupineKeyInput: document.getElementById('porcupineKey'),
-            saveConfigBtn: document.getElementById('saveConfig'),
-            apiConfig: document.getElementById('apiConfig'),
-            
             // Control buttons
             startBtn: document.getElementById('startBtn'),
             stopBtn: document.getElementById('stopBtn'),
@@ -44,14 +37,8 @@ class UIController {
             debugBox: document.getElementById('debugBox')
         };
         
-        // Load saved keys
-        this.loadSavedKeys();
-        
-        // Enable start button if configured
-        if (config.isConfigured()) {
-            this.elements.startBtn.disabled = false;
-            this.elements.apiConfig.style.display = 'none';
-        }
+        // Enable start button (no API keys needed in browser)
+        this.elements.startBtn.disabled = false;
         
         // Setup event listeners
         this.setupEventListeners();
@@ -63,11 +50,6 @@ class UIController {
      * Setup event listeners
      */
     setupEventListeners() {
-        // Save configuration
-        this.elements.saveConfigBtn.addEventListener('click', () => {
-            this.saveConfiguration();
-        });
-        
         // Toggle debug with Ctrl+D
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey && e.key === 'd') {
@@ -75,41 +57,6 @@ class UIController {
                 this.toggleDebug();
             }
         });
-    }
-    
-    /**
-     * Load saved API keys
-     */
-    loadSavedKeys() {
-        if (config.getOpenAIKey()) {
-            this.elements.openaiKeyInput.value = config.getOpenAIKey();
-        }
-        if (config.getPicovoiceKey()) {
-            this.elements.porcupineKeyInput.value = config.getPicovoiceKey();
-        }
-    }
-    
-    /**
-     * Save configuration
-     */
-    saveConfiguration() {
-        const openaiKey = this.elements.openaiKeyInput.value.trim();
-        const porcupineKey = this.elements.porcupineKeyInput.value.trim();
-        
-        if (!openaiKey) {
-            alert('Please enter an OpenAI API key');
-            return;
-        }
-        
-        config.setOpenAIKey(openaiKey);
-        if (porcupineKey) {
-            config.setPicovoiceKey(porcupineKey);
-        }
-        
-        this.elements.startBtn.disabled = false;
-        this.elements.apiConfig.style.display = 'none';
-        
-        this.showInfo('Configuration saved successfully!');
     }
     
     /**
@@ -130,31 +77,29 @@ class UIController {
         };
         
         this.elements.statusText.textContent = statusTexts[status] || status;
-        
-        // Start latency timer on processing
-        if (status === 'processing') {
-            this.latencyStartTime = Date.now();
-        }
     }
     
     /**
      * Update latency display
      */
-    updateLatency() {
-        if (!this.latencyStartTime) return;
-        
-        const latency = Date.now() - this.latencyStartTime;
-        this.elements.latencyValue.textContent = `${latency} ms`;
+    updateLatency(latencyMs) {
+        this.elements.latencyValue.textContent = `${latencyMs} ms`;
         
         // Color code based on target
         this.elements.latencyValue.className = 'latency-value';
-        if (latency > config.latency.criticalMs) {
+        if (latencyMs > config.latency.criticalMs) {
             this.elements.latencyValue.classList.add('very-slow');
-        } else if (latency > config.latency.warningMs) {
+        } else if (latencyMs > config.latency.warningMs) {
             this.elements.latencyValue.classList.add('slow');
         }
-        
-        this.latencyStartTime = null;
+    }
+    
+    /**
+     * Reset latency display
+     */
+    resetLatency() {
+        this.elements.latencyValue.textContent = '-- ms';
+        this.elements.latencyValue.className = 'latency-value';
     }
     
     /**
@@ -233,21 +178,36 @@ class UIController {
         this.debugEnabled = !this.debugEnabled;
         this.elements.debugSection.style.display = 
             this.debugEnabled ? 'block' : 'none';
+        
+        if (this.debugEnabled) {
+            this.log('Debug console enabled', 'info');
+        }
     }
     
     /**
      * Log to debug console
      */
     log(message, type = 'info') {
+        // Always log to console
+        const timestamp = new Date().toLocaleTimeString();
+        console.log(`[${timestamp}] ${message}`);
+        
+        // Only show in debug if enabled
         if (!this.debugEnabled) return;
         
-        const timestamp = new Date().toLocaleTimeString();
         const entry = document.createElement('div');
         entry.className = `debug-entry debug-${type}`;
         entry.textContent = `[${timestamp}] ${message}`;
         
         this.elements.debugBox.appendChild(entry);
+        
+        // Auto-scroll to bottom
         this.elements.debugBox.scrollTop = this.elements.debugBox.scrollHeight;
+        
+        // Limit debug entries to 100
+        while (this.elements.debugBox.children.length > 100) {
+            this.elements.debugBox.removeChild(this.elements.debugBox.firstChild);
+        }
     }
     
     /**
