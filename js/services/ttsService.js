@@ -1,6 +1,6 @@
 /**
  * Text-to-Speech Service
- * Handles streaming TTS via OpenAI Realtime API through proxy
+ * Uses Google Cloud Wavenet via proxy
  */
 
 class TTSService {
@@ -14,35 +14,28 @@ class TTSService {
         this.onSpeechStarted = null;
         this.onSpeechEnded = null;
         this.onError = null;
-        
-        // Session state
-        this.sessionId = null;
-        this.currentResponseId = null;
     }
     
     /**
-     * Connect to OpenAI Realtime API via local proxy
+     * Connect to proxy server
      */
     async connect() {
         return new Promise((resolve, reject) => {
             try {
-                // Connect to LOCAL proxy server (not directly to OpenAI)
-                const wsUrl = `ws://localhost:8080?model=gpt-4o-mini-realtime-preview-2024-12-17`;
+                const wsUrl = `ws://localhost:8080?service=tts`;
                 
-                console.log('Connecting TTS to proxy server:', wsUrl);
+                console.log('Connecting to Google TTS proxy:', wsUrl);
                 this.ws = new WebSocket(wsUrl);
                 
                 this.ws.onopen = () => {
-                    console.log('TTS WebSocket connected to proxy');
-                    this.isConnected = true;
+                    console.log('✅ TTS WebSocket connected to proxy');
                     
-                    // Send session configuration
-                    this.sendSessionUpdate();
-                    resolve();
+                    // Send start message
+                    this.send({ type: 'start' });
                 };
                 
                 this.ws.onmessage = (event) => {
-                    this.handleMessage(event.data);
+                    this.handleMessage(event.data, resolve, reject);
                 };
                 
                 this.ws.onerror = (error) => {
@@ -50,6 +43,7 @@ class TTSService {
                     if (this.onError) {
                         this.onError(error);
                     }
+                    reject(error);
                 };
                 
                 this.ws.onclose = () => {
@@ -64,79 +58,64 @@ class TTSService {
     }
     
     /**
-     * Send session configuration
-     */
-    sendSessionUpdate() {
-        const sessionConfig = {
-            type: 'session.update',
-            session: {
-                modalities: ['text', 'audio'],
-                instructions: 'You are a helpful voice assistant.',
-                voice: 'shimmer',
-                input_audio_format: 'pcm16',
-                output_audio_format: 'pcm16',
-                turn_detection: null // Disable turn detection for TTS-only mode
-            }
-        };
-        
-        this.send(sessionConfig);
-    }
-    
-    /**
      * Handle incoming messages
      */
-    handleMessage(data) {
+    handleMessage(data, resolvePromise, rejectPromise) {
         try {
             const message = JSON.parse(data);
             
             switch (message.type) {
-                case 'session.created':
-                    this.sessionId = message.session.id;
-                    console.log('TTS session created:', this.sessionId);
-                    break;
+                case 'ready':
+                    console.log('✅ Google TTS ready');
+                    this.isConnected = true;
                     
-                case 'response.audio.delta':
-                    // Streaming audio chunk
-                    if (message.delta && this.onAudioChunk) {
-                        const audioData = this.base64ToArrayBuffer(message.delta);
-                        this.onAudioChunk(audioData);
+                    if (resolvePromise) {
+                        resolvePromise();
                     }
                     break;
                     
-                case 'response.audio.done':
-                    console.log('TTS audio stream completed');
+                case 'audio':
+                    // Streaming audio chunk
+                    if (message.data && this.onAudioChunk) {
+                        const audioData = this.base64ToArrayBuffer(message.data);
+                        this.onAudioChunk(audioData);
+                        
+                        // Start speaking on first chunk
+                        if (!this.isSpeaking) {
+                            this.isSpeaking = true;
+                            if (this.onSpeechStarted) {
+                                this.onSpeechStarted();
+                            }
+                        }
+                    }
+                    break;
+                    
+                case 'done':
+                    console.log('✅ TTS audio stream completed');
                     this.isSpeaking = false;
                     if (this.onSpeechEnded) {
                         this.onSpeechEnded();
                     }
                     break;
                     
-                case 'response.created':
-                    this.currentResponseId = message.response.id;
-                    console.log('Response created:', this.currentResponseId);
-                    break;
-                    
-                case 'response.output_item.added':
-                    console.log('Output item added');
-                    break;
-                    
-                case 'response.content_part.added':
-                    console.log('Content part added');
-                    if (this.onSpeechStarted) {
-                        this.onSpeechStarted();
-                    }
-                    this.isSpeaking = true;
-                    break;
-                    
                 case 'error':
-                    console.error('TTS error:', message.error);
+                    console.error('❌ TTS error:', message.message);
+                    const error = new Error(message.message);
+                    
                     if (this.onError) {
-                        this.onError(new Error(message.error.message || 'Unknown error'));
+                        this.onError(error);
+                    }
+                    
+                    if (rejectPromise) {
+                        rejectPromise(error);
                     }
                     break;
             }
         } catch (error) {
             console.error('Failed to parse TTS message:', error);
+            if (rejectPromise) {
+                rejectPromise(error);
+            }
         }
     }
     
@@ -149,48 +128,12 @@ class TTSService {
             return;
         }
         
-        console.log('Speaking:', text);
+        console.log('🔊 Speaking:', text);
         
-        // Create conversation item with text
-        const createMessage = {
-            type: 'conversation.item.create',
-            item: {
-                type: 'message',
-                role: 'user',
-                content: [
-                    {
-                        type: 'input_text',
-                        text: text
-                    }
-                ]
-            }
-        };
-        
-        this.send(createMessage);
-        
-        // Create response request
-        const responseMessage = {
-            type: 'response.create',
-            response: {
-                modalities: ['audio'],
-                instructions: 'Respond to the user message.'
-            }
-        };
-        
-        this.send(responseMessage);
-    }
-    
-    /**
-     * Cancel current speech
-     */
-    cancel() {
-        if (this.currentResponseId) {
-            const cancelMessage = {
-                type: 'response.cancel'
-            };
-            this.send(cancelMessage);
-        }
-        this.isSpeaking = false;
+        this.send({
+            type: 'speak',
+            text: text
+        });
     }
     
     /**

@@ -3,13 +3,15 @@
   "version": "1.0.0",
   "main": "proxy_server.js",
   "scripts": {
-    "start":"node proxy_server.js"
+    "start": "node proxy_server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@google-cloud/text-to-speech": "^6.4.0",
+    "form-data": "^4.0.5",
     "ws": "^8.18.3"
   }
 }

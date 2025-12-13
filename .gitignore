@@ -1,3 +1,4 @@
 *node_modules
 *package-lock.json
 *.env
+wavenet_tts_service_account.json

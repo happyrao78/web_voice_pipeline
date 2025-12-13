@@ -1,6 +1,6 @@
 /**
  * Speech-to-Text Service
- * Handles WebSocket streaming to OpenAI Realtime API via proxy
+ * Uses Groq Whisper API via proxy
  */
 
 class STTService {
@@ -17,34 +17,31 @@ class STTService {
         this.onFinalTranscript = null;
         this.onError = null;
         
-        // Session state
-        this.sessionId = null;
+        // Audio buffer
+        this.audioBuffer = [];
+        this.transcriptionTimeout = null;
     }
     
     /**
-     * Connect to OpenAI Realtime API via local proxy
+     * Connect to proxy server
      */
     async connect() {
         return new Promise((resolve, reject) => {
             try {
-                // Connect to LOCAL proxy server (not directly to OpenAI)
-                const wsUrl = `ws://localhost:8080?model=gpt-4o-mini-realtime-preview-2024-12-17`;
+                const wsUrl = `ws://localhost:8080?service=stt`;
 
-                console.log('Connecting to proxy server:', wsUrl);
+                console.log('Connecting to Groq STT proxy:', wsUrl);
                 this.ws = new WebSocket(wsUrl);
                 
                 this.ws.onopen = () => {
-                    console.log('STT WebSocket connected to proxy');
-                    this.isConnected = true;
-                    this.reconnectAttempts = 0;
+                    console.log('✅ STT WebSocket connected to proxy');
                     
-                    // Send session configuration
-                    this.sendSessionUpdate();
-                    resolve();
+                    // Send start message
+                    this.send({ type: 'start' });
                 };
                 
                 this.ws.onmessage = (event) => {
-                    this.handleMessage(event.data);
+                    this.handleMessage(event.data, resolve, reject);
                 };
                 
                 this.ws.onerror = (error) => {
@@ -52,6 +49,7 @@ class STTService {
                     if (this.onError) {
                         this.onError(error);
                     }
+                    reject(error);
                 };
                 
                 this.ws.onclose = () => {
@@ -67,93 +65,50 @@ class STTService {
     }
     
     /**
-     * Send session configuration
-     */
-    sendSessionUpdate() {
-        const sessionConfig = {
-            type: 'session.update',
-            session: {
-                modalities: ['text', 'audio'],
-                instructions: 'You are a voice transcription system. Transcribe speech accurately.',
-                voice: 'alloy',
-                input_audio_format: 'pcm16',
-                output_audio_format: 'pcm16',
-                input_audio_transcription: {
-                    model: 'whisper-1'
-                },
-                turn_detection: {
-                    type: 'server_vad',
-                    threshold: 0.5,
-                    prefix_padding_ms: 300,
-                    silence_duration_ms: 500
-                }
-            }
-        };
-        
-        this.send(sessionConfig);
-    }
-    
-    /**
      * Handle incoming messages
      */
-    handleMessage(data) {
+    handleMessage(data, resolvePromise, rejectPromise) {
         try {
             const message = JSON.parse(data);
             
             switch (message.type) {
-                case 'session.created':
-                    this.sessionId = message.session.id;
-                    console.log('Session created:', this.sessionId);
-                    break;
+                case 'ready':
+                    console.log('✅ Groq STT ready');
+                    this.isConnected = true;
+                    this.reconnectAttempts = 0;
                     
-                case 'input_audio_buffer.speech_started':
-                    console.log('Speech started');
-                    break;
-                    
-                case 'input_audio_buffer.speech_stopped':
-                    console.log('Speech stopped');
-                    break;
-                    
-                case 'conversation.item.input_audio_transcription.completed':
-                    // Partial transcript
-                    if (this.onPartialTranscript && message.transcript) {
-                        this.onPartialTranscript(message.transcript);
+                    if (resolvePromise) {
+                        resolvePromise();
                     }
                     break;
                     
-                case 'response.audio_transcript.delta':
-                    // Partial transcript chunk
-                    if (this.onPartialTranscript && message.delta) {
-                        this.onPartialTranscript(message.delta);
-                    }
-                    break;
+                case 'transcript':
+                    const transcript = message.text;
+                    console.log('📝 Transcript:', transcript);
                     
-                case 'response.audio_transcript.done':
-                    // Final transcript
-                    if (this.onFinalTranscript && message.transcript) {
-                        this.onFinalTranscript(message.transcript);
-                    }
-                    break;
-                    
-                case 'response.done':
-                    // Response completed
-                    if (message.response?.output?.[0]?.content?.[0]?.transcript) {
-                        const transcript = message.response.output[0].content[0].transcript;
-                        if (this.onFinalTranscript) {
-                            this.onFinalTranscript(transcript);
-                        }
+                    if (this.onFinalTranscript) {
+                        this.onFinalTranscript(transcript);
                     }
                     break;
                     
                 case 'error':
-                    console.error('STT error:', message.error);
+                    console.error('❌ STT error:', message.message);
+                    const error = new Error(message.message);
+                    
                     if (this.onError) {
-                        this.onError(new Error(message.error.message || 'Unknown error'));
+                        this.onError(error);
+                    }
+                    
+                    if (rejectPromise) {
+                        rejectPromise(error);
                     }
                     break;
             }
         } catch (error) {
             console.error('Failed to parse STT message:', error);
+            if (rejectPromise) {
+                rejectPromise(error);
+            }
         }
     }
     
@@ -170,12 +125,20 @@ class STTService {
         const int16Data = new Int16Array(audioData);
         const base64Audio = this.arrayBufferToBase64(int16Data.buffer);
         
-        const message = {
-            type: 'input_audio_buffer.append',
+        // Send audio chunk
+        this.send({
+            type: 'audio',
             audio: base64Audio
-        };
+        });
         
-        this.send(message);
+        // Debounce transcription (trigger after 500ms of silence)
+        if (this.transcriptionTimeout) {
+            clearTimeout(this.transcriptionTimeout);
+        }
+        
+        this.transcriptionTimeout = setTimeout(() => {
+            this.commitAudio();
+        }, 500);
     }
     
     /**
@@ -186,11 +149,8 @@ class STTService {
             return;
         }
         
-        const message = {
-            type: 'input_audio_buffer.commit'
-        };
-        
-        this.send(message);
+        console.log('🎤 Triggering transcription...');
+        this.send({ type: 'transcribe' });
     }
     
     /**
@@ -223,6 +183,14 @@ class STTService {
      */
     stopTranscription() {
         this.isTranscribing = false;
+        
+        // Clear timeout
+        if (this.transcriptionTimeout) {
+            clearTimeout(this.transcriptionTimeout);
+            this.transcriptionTimeout = null;
+        }
+        
+        // Final transcription
         this.commitAudio();
     }
     
@@ -256,6 +224,11 @@ class STTService {
         }
         this.isConnected = false;
         this.isTranscribing = false;
+        
+        if (this.transcriptionTimeout) {
+            clearTimeout(this.transcriptionTimeout);
+            this.transcriptionTimeout = null;
+        }
     }
     
     /**

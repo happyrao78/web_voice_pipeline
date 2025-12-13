@@ -1,15 +1,11 @@
 /**
  * Configuration Manager
- * Handles API keys and system configuration
+ * Handles system configuration
+ * NO API KEYS NEEDED IN BROWSER (handled by proxy)
  */
 
 class Config {
     constructor() {
-        this.keys = {
-            openai: null,
-            picovoice: null
-        };
-        
         // Audio configuration
         this.audio = {
             sampleRate: 16000,
@@ -40,88 +36,19 @@ class Config {
             heartbeatIntervalMs: 30000
         };
         
-        this.loadFromStorage();
+        // Service providers
+        this.providers = {
+            stt: 'groq', // Groq Whisper
+            tts: 'google' // Google Wavenet
+        };
     }
     
     /**
-     * Set OpenAI API key
-     */
-    setOpenAIKey(key) {
-        this.keys.openai = key;
-        this.saveToStorage();
-    }
-    
-    /**
-     * Set Picovoice access key
-     */
-    setPicovoiceKey(key) {
-        this.keys.picovoice = key;
-        this.saveToStorage();
-    }
-    
-    /**
-     * Get OpenAI API key
-     */
-    getOpenAIKey() {
-        return this.keys.openai;
-    }
-    
-    /**
-     * Get Picovoice access key
-     */
-    getPicovoiceKey() {
-        return this.keys.picovoice;
-    }
-    
-    /**
-     * Check if required keys are set
+     * Check if configured
+     * (Always true since no keys needed in browser)
      */
     isConfigured() {
-        return !!this.keys.openai;
-    }
-    
-    /**
-     * Save configuration to localStorage
-     */
-    saveToStorage() {
-        try {
-            const config = {
-                openai: this.keys.openai,
-                picovoice: this.keys.picovoice
-            };
-            localStorage.setItem('qplus_config', JSON.stringify(config));
-        } catch (error) {
-            console.error('Failed to save configuration:', error);
-        }
-    }
-    
-    /**
-     * Load configuration from localStorage
-     */
-    loadFromStorage() {
-        try {
-            const stored = localStorage.getItem('qplus_config');
-            if (stored) {
-                const config = JSON.parse(stored);
-                this.keys.openai = config.openai || null;
-                this.keys.picovoice = config.picovoice || null;
-            }
-        } catch (error) {
-            console.error('Failed to load configuration:', error);
-        }
-    }
-    
-    /**
-     * Clear all stored configuration
-     */
-    clearStorage() {
-        try {
-            localStorage.removeItem('qplus_config');
-            this.keys.openai = null;
-            this.keys.picovoice = null;
-        } catch (error) {
-            console.error('Failed to clear configuration:', error);
-        }
+        return true;
     }
 }
 
