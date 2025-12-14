@@ -810,7 +810,7 @@ Target: <800ms | Warning: <1200ms | Critical: <1500ms
 
 ## Demo Video
 
-**Video Demonstration**:
+**Video Demonstration**: <video controls src="20251214_230328.mp4" title="Web_Voice_Agent"></video>
 
 **Video Content**:
 - Complete interaction flow demonstration
