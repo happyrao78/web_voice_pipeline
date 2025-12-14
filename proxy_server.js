@@ -199,7 +199,7 @@ async function transcribeWithGroq(audioBuffer) {
             filename: 'audio.wav',
             contentType: 'audio/wav'
         });
-        form.append('model', 'whisper-large-v3-turbo');
+        form.append('model', 'whisper-large-v3');
         form.append('language', 'en');
         form.append('response_format', 'json');
         

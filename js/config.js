@@ -41,7 +41,7 @@ class Config {
         this.providers = {
             stt: {
                 provider: 'Groq',
-                model: 'whisper-large-v3-turbo',
+                model: 'whisper-large-v3',
                 language: 'en',
                 temperature: 0 // More deterministic
             },
