@@ -2,6 +2,7 @@
   "name": "webrtc_voice_pipeline",
   "version": "1.0.0",
   "main": "proxy_server.js",
+  "type": "module",
   "scripts": {
     "start": "node proxy_server.js"
   },

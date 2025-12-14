@@ -10,7 +10,7 @@
     <div class="container">
         <header>
             <h1>🎤 Qplus Voice Assistant</h1>
-            <p class="subtitle">Say "Hey Qplus" to activate</p>
+            <p class="subtitle">Say "Hey Quantum" to activate</p>
         </header>
 
         <main>
@@ -71,6 +71,10 @@
         </footer>
     </div>
 
+    <!-- Load Porcupine from CDN first (version 4.0.0 to match .ppn file) -->
+    <script src="https://unpkg.com/@picovoice/porcupine-web@4.0.0/dist/iife/index.js"></script>
+    <script src="https://unpkg.com/@picovoice/web-voice-processor@4.0.0/dist/iife/index.js"></script>
+    
     <!-- Load modules -->
     <script type="module" src="js/main.js"></script>
 </body>

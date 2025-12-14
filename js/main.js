@@ -29,18 +29,18 @@ class VoiceAssistant {
         this.isProcessing = false;
         this.currentTranscript = '';
         
-        // Timing
+        // Timing for end-to-end latency (wake word detection to TTS playback start)
         this.wakeWordDetectedTime = null;
-        this.firstAudioChunkTime = null;
+        this.ttsPlaybackStartTime = null;
         
         // Speech detection with actual audio energy
         this.silenceTimer = null;
         this.hasSpeech = false;
-        this.silenceTriggered = false; // Prevent multiple triggers
-        this.silenceThreshold = 0.01; // RMS threshold for silence
-        this.silenceDuration = 800; // 800ms of silence triggers stop
+        this.silenceTriggered = false;
+        this.silenceThreshold = 0.01;
+        this.silenceDuration = 800;
         this.consecutiveSilenceFrames = 0;
-        this.requiredSilenceFrames = Math.floor(this.silenceDuration / 20); // 20ms per frame
+        this.requiredSilenceFrames = Math.floor(this.silenceDuration / 20);
     }
     
     /**
@@ -115,8 +115,8 @@ class VoiceAssistant {
             // Setup TTS callbacks
             this.ttsService.setCallbacks({
                 onAudioChunk: (audioData) => this.handleTTSAudioChunk(audioData),
-                onSpeechStarted: () => {}, // Handled by playback
-                onSpeechEnded: () => {}, // Handled by playback
+                onSpeechStarted: () => {},
+                onSpeechEnded: () => {},
                 onError: (error) => this.handleError(error)
             });
             
@@ -149,7 +149,7 @@ class VoiceAssistant {
     /**
      * Start listening for wake word
      */
-    startWakeWordListening() {
+    async startWakeWordListening() {
         this.ui.setStatus('listening');
         this.ui.clearTranscript();
         this.ui.clearResponse();
@@ -159,17 +159,17 @@ class VoiceAssistant {
         this.hasSpeech = false;
         this.consecutiveSilenceFrames = 0;
         this.silenceTriggered = false;
+        this.wakeWordDetectedTime = null;
+        this.ttsPlaybackStartTime = null;
         
-        // Start wake word detection
-        this.wakeWordDetector.start(() => {
+        // Start wake word detection (WebVoiceProcessor will handle audio)
+        await this.wakeWordDetector.start(() => {
             this.handleWakeWordDetected();
         });
         
-        // Start audio capture and feed to wake word detector
+        // Start audio capture for STT only (Porcupine uses WebVoiceProcessor)
         this.audioCapture.start((audioData) => {
-            if (this.wakeWordDetector.isActive()) {
-                this.wakeWordDetector.processAudio(audioData);
-            } else if (this.isProcessing && this.sttService.isActive()) {
+            if (this.isProcessing && this.sttService.isActive()) {
                 // Calculate RMS energy for silence detection
                 const energy = this.calculateRMS(audioData);
                 
@@ -190,7 +190,7 @@ class VoiceAssistant {
                     
                     // Check if silence duration reached
                     if (this.consecutiveSilenceFrames >= this.requiredSilenceFrames) {
-                        this.silenceTriggered = true; // Prevent multiple triggers
+                        this.silenceTriggered = true;
                         this.ui.log(`Silence detected (${this.consecutiveSilenceFrames} frames)`);
                         this.stopSpeechDetection();
                     }
@@ -199,7 +199,7 @@ class VoiceAssistant {
         });
         
         this.isWaitingForWakeWord = true;
-        this.ui.log('Listening for wake word: "Hey Qplus"');
+        this.ui.log('Listening for wake word: "Hey Quantum"');
     }
     
     /**
@@ -222,7 +222,7 @@ class VoiceAssistant {
      */
     stopSpeechDetection() {
         if (this.isProcessing && this.sttService.isActive() && !this.silenceTriggered) {
-            return; // Already triggered
+            return;
         }
         
         if (this.isProcessing && this.sttService.isActive()) {
@@ -236,12 +236,13 @@ class VoiceAssistant {
      */
     async handleWakeWordDetected() {
         this.ui.log('Wake word detected!');
+        
+        // Mark wake word detection time for end-to-end latency
+        this.wakeWordDetectedTime = Date.now();
+        
         this.isWaitingForWakeWord = false;
         this.isProcessing = true;
         this.ui.setStatus('processing');
-        
-        // Mark wake word detection time
-        this.wakeWordDetectedTime = Date.now();
         
         // Reset speech detection
         this.hasSpeech = false;
@@ -249,7 +250,7 @@ class VoiceAssistant {
         this.silenceTriggered = false;
         
         // Stop wake word detection
-        this.wakeWordDetector.stop();
+        await this.wakeWordDetector.stop();
         
         // Connect to STT service
         await this.sttService.connect();
@@ -313,8 +314,8 @@ class VoiceAssistant {
      */
     async speakResponse(text) {
         try {
-            // Mark first audio chunk time for latency calculation
-            this.firstAudioChunkTime = null;
+            // Reset TTS playback start time
+            this.ttsPlaybackStartTime = null;
             
             // Speak the response
             this.ttsService.speak(text);
@@ -330,11 +331,6 @@ class VoiceAssistant {
      * Handle TTS audio chunk
      */
     handleTTSAudioChunk(audioData) {
-        // Mark first audio chunk time
-        if (!this.firstAudioChunkTime) {
-            this.firstAudioChunkTime = Date.now();
-        }
-        
         // Feed audio to playback
         this.audioPlayback.addAudioChunk(audioData);
     }
@@ -345,16 +341,15 @@ class VoiceAssistant {
     handleSpeechStarted() {
         this.ui.setStatus('speaking');
         
-        // Calculate and update latency (wake word to first audio)
-        if (this.wakeWordDetectedTime && this.firstAudioChunkTime) {
-            const latency = this.firstAudioChunkTime - this.wakeWordDetectedTime;
+        // Mark TTS playback start time
+        this.ttsPlaybackStartTime = Date.now();
+        
+        // Calculate and update end-to-end latency (wake word to TTS playback)
+        if (this.wakeWordDetectedTime && this.ttsPlaybackStartTime) {
+            const latency = this.ttsPlaybackStartTime - this.wakeWordDetectedTime;
             this.ui.updateLatency(latency);
             this.ui.log(`End-to-end latency: ${latency}ms`);
         }
-        
-        // Reset timers
-        this.wakeWordDetectedTime = null;
-        this.firstAudioChunkTime = null;
     }
     
     /**
@@ -378,7 +373,7 @@ class VoiceAssistant {
         this.isProcessing = false;
         this.currentTranscript = '';
         this.wakeWordDetectedTime = null;
-        this.firstAudioChunkTime = null;
+        this.ttsPlaybackStartTime = null;
         this.hasSpeech = false;
         this.consecutiveSilenceFrames = 0;
         this.silenceTriggered = false;

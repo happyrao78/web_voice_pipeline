@@ -1,7 +1,6 @@
 /**
  * Wake Word Detector
- * Detects "Hey Qplus" using client-side processing
- * Falls back to simple energy-based detection if Porcupine not available
+ * Detects "Hey Quantum" using Picovoice Porcupine with WebVoiceProcessor
  */
 
 import config from '../config.js';
@@ -10,88 +9,146 @@ class WakeWordDetector {
     constructor() {
         this.isListening = false;
         this.onWakeWordDetected = null;
-        this.porcupineEngine = null;
-        this.usePorcupine = false;
-        
-        // Simple energy-based detection
-        this.energyThreshold = 0.02;
-        this.silenceThreshold = 0.005;
-        this.speechFrames = 0;
-        this.minSpeechFrames = 10; // ~200ms of speech
+        this.porcupineWorker = null;
+        this.isInitialized = false;
         this.cooldownUntil = 0;
+        this.accessKey = null;
     }
     
     /**
-     * Initialize wake word detector
+     * Initialize wake word detector with Porcupine
      */
     async initialize() {
         try {
-            const picovoiceKey = config.getPicovoiceKey();
+            // Wait for libraries to load from CDN
+            await this.waitForLibraries();
             
-            if (picovoiceKey) {
-                // Try to initialize Porcupine
-                await this.initializePorcupine(picovoiceKey);
-            } else {
-                console.log('Picovoice key not provided, using simple energy detection');
-                this.usePorcupine = false;
+            // Fetch Porcupine access key from proxy server
+            const response = await fetch('http://localhost:8080/porcupine-key');
+            const data = await response.json();
+            this.accessKey = data.key;
+            
+            if (!this.accessKey) {
+                throw new Error('Porcupine access key not found');
             }
             
+            console.log('Porcupine access key loaded');
+            
+            // Get PorcupineWorker from global window object
+            const { PorcupineWorker } = window.PorcupineWeb;
+            
+            // Create keyword model object
+            const keywordModel = {
+                publicPath: "Hey-Quantum_en_wasm_v4_0_0.ppn",
+                label: "hey quantum"
+            };
+            
+            // Detection callback
+            const detectionCallback = (detection) => {
+                console.log('Porcupine detected:', detection.label);
+                this.handleWakeWordDetected();
+            };
+            
+            // Create model parameter
+            const modelParams = {
+                publicPath: "porcupine_params.pv"
+            };
+            
+            // Initialize Porcupine
+            this.porcupineWorker = await PorcupineWorker.create(
+                this.accessKey,
+                [keywordModel],
+                detectionCallback,
+                modelParams
+            );
+            
+            console.log('✅ Porcupine worker created');
+            
+            this.isInitialized = true;
+            console.log('✅ Porcupine wake word detector initialized');
             return true;
         } catch (error) {
-            console.warn('Failed to initialize Porcupine, falling back to simple detection:', error);
-            this.usePorcupine = false;
-            return true;
-        }
-    }
-    
-    /**
-     * Initialize Porcupine (if available)
-     */
-    async initializePorcupine(accessKey) {
-        try {
-            // Note: This is a placeholder for Porcupine integration
-            // You would need to load the Porcupine WASM library here
-            // For now, we'll use simple detection
-            
-            // Example Porcupine initialization (pseudo-code):
-            // const { Porcupine } = await import('@picovoice/porcupine-web');
-            // this.porcupineEngine = await Porcupine.create(
-            //     accessKey,
-            //     { keywords: ['hey-qplus'] }
-            // );
-            
-            console.log('Porcupine not implemented in this version');
-            this.usePorcupine = false;
-        } catch (error) {
+            console.error('Failed to initialize Porcupine:', error);
             throw error;
         }
     }
     
     /**
+     * Wait for Porcupine and WebVoiceProcessor libraries to load from CDN
+     */
+    async waitForLibraries() {
+        let attempts = 0;
+        const maxAttempts = 100;
+        
+        while ((!window.PorcupineWeb || !window.WebVoiceProcessor) && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+        
+        if (!window.PorcupineWeb) {
+            throw new Error('Porcupine library failed to load from CDN');
+        }
+        
+        if (!window.WebVoiceProcessor) {
+            throw new Error('WebVoiceProcessor library failed to load from CDN');
+        }
+        
+        console.log('✅ Porcupine and WebVoiceProcessor libraries loaded from CDN');
+    }
+    
+    /**
      * Start listening for wake word
      */
-    start(onDetectedCallback) {
+    async start(onDetectedCallback) {
+        if (!this.isInitialized) {
+            console.error('Porcupine not initialized');
+            return;
+        }
+        
         this.isListening = true;
         this.onWakeWordDetected = onDetectedCallback;
-        this.speechFrames = 0;
-        console.log('Wake word detector started');
+        
+        // Subscribe to WebVoiceProcessor
+        const { WebVoiceProcessor } = window.WebVoiceProcessor;
+        await WebVoiceProcessor.subscribe(this.porcupineWorker);
+        
+        console.log('✅ Wake word detector started and subscribed to WebVoiceProcessor');
     }
     
     /**
      * Stop listening for wake word
      */
-    stop() {
+    async stop() {
+        if (!this.isInitialized) {
+            return;
+        }
+        
         this.isListening = false;
         this.onWakeWordDetected = null;
-        this.speechFrames = 0;
-        console.log('Wake word detector stopped');
+        
+        // Unsubscribe from WebVoiceProcessor
+        try {
+            const { WebVoiceProcessor } = window.WebVoiceProcessor;
+            await WebVoiceProcessor.unsubscribe(this.porcupineWorker);
+            console.log('✅ Unsubscribed from WebVoiceProcessor');
+        } catch (error) {
+            console.error('Error unsubscribing from WebVoiceProcessor:', error);
+        }
     }
     
     /**
-     * Process audio data for wake word detection
+     * Process audio data - NOT USED (WebVoiceProcessor handles this)
      */
     processAudio(audioData) {
-        if (!this.isListening || !this.onWakeWordDetected) {
+        // WebVoiceProcessor automatically feeds audio to Porcupine
+        // This method is kept for compatibility but not used
+    }
+    
+    /**
+     * Handle wake word detection
+     */
+    handleWakeWordDetected() {
+        if (!this.isListening) {
             return;
         }
         
@@ -100,64 +157,10 @@ class WakeWordDetector {
             return;
         }
         
-        if (this.usePorcupine && this.porcupineEngine) {
-            this.processPorcupine(audioData);
-        } else {
-            this.processSimpleDetection(audioData);
-        }
-    }
-    
-    /**
-     * Process with Porcupine
-     */
-    processPorcupine(audioData) {
-        // Placeholder for Porcupine processing
-        // const int16Data = new Int16Array(audioData);
-        // const detected = this.porcupineEngine.process(int16Data);
-        // if (detected >= 0) {
-        //     this.handleWakeWordDetected();
-        // }
-    }
-    
-    /**
-     * Simple energy-based detection
-     */
-    processSimpleDetection(audioData) {
-        const int16Data = new Int16Array(audioData);
-        
-        // Calculate RMS energy
-        let sum = 0;
-        for (let i = 0; i < int16Data.length; i++) {
-            const normalized = int16Data[i] / 32768.0;
-            sum += normalized * normalized;
-        }
-        const rms = Math.sqrt(sum / int16Data.length);
-        
-        // Detect speech based on energy
-        if (rms > this.energyThreshold) {
-            this.speechFrames++;
-            
-            // If we have sustained speech, trigger wake word
-            if (this.speechFrames >= this.minSpeechFrames) {
-                this.handleWakeWordDetected();
-            }
-        } else if (rms < this.silenceThreshold) {
-            // Reset on silence
-            this.speechFrames = Math.max(0, this.speechFrames - 1);
-        }
-    }
-    
-    /**
-     * Handle wake word detection
-     */
-    handleWakeWordDetected() {
-        console.log('Wake word detected!');
+        console.log('✅ Wake word "Hey Quantum" detected!');
         
         // Set cooldown to prevent multiple rapid detections
         this.cooldownUntil = Date.now() + config.wakeWord.cooldownMs;
-        
-        // Reset state
-        this.speechFrames = 0;
         
         // Notify callback
         if (this.onWakeWordDetected) {
@@ -176,14 +179,20 @@ class WakeWordDetector {
      * Cleanup resources
      */
     async cleanup() {
-        this.stop();
+        await this.stop();
         
-        if (this.porcupineEngine) {
-            // await this.porcupineEngine.release();
-            this.porcupineEngine = null;
+        if (this.porcupineWorker) {
+            try {
+                await this.porcupineWorker.release();
+                await this.porcupineWorker.terminate();
+            } catch (error) {
+                console.error('Error cleaning up Porcupine:', error);
+            }
+            this.porcupineWorker = null;
         }
         
-        console.log('Wake word detector cleaned up');
+        this.isInitialized = false;
+        console.log('✅ Wake word detector cleaned up');
     }
 }
 

@@ -1,16 +1,21 @@
-const WebSocket = require('ws');
-const http = require('http');
-const https = require('https');
-const fs = require('fs');
-const path = require('path');
-const textToSpeech = require('@google-cloud/text-to-speech');
-const FormData = require('form-data');
+import { WebSocketServer } from 'ws';
+import http from 'http';
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import textToSpeech from '@google-cloud/text-to-speech';
+import FormData from 'form-data';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const PORT = 8080;
 
 // Read API keys from .env file
 let GROQ_API_KEY = '';
 let GOOGLE_CREDENTIALS_PATH = '';
+let PICOVOICE_ACCESS_KEY = '';
 
 try {
     const envPath = path.join(__dirname, '.env');
@@ -25,6 +30,11 @@ try {
         const googleMatch = envContent.match(/GOOGLE_APPLICATION_CREDENTIALS=(.+)/);
         if (googleMatch) {
             GOOGLE_CREDENTIALS_PATH = googleMatch[1].trim();
+        }
+        
+        const picovoiceMatch = envContent.match(/PICOVOICE_ACCESS_KEY=(.+)/);
+        if (picovoiceMatch) {
+            PICOVOICE_ACCESS_KEY = picovoiceMatch[1].trim();
         }
     }
 } catch (error) {
@@ -41,6 +51,11 @@ if (!GOOGLE_CREDENTIALS_PATH) {
     process.exit(1);
 }
 
+if (!PICOVOICE_ACCESS_KEY) {
+    console.error('ERROR: PICOVOICE_ACCESS_KEY not found in .env file');
+    process.exit(1);
+}
+
 // Set Google credentials
 process.env.GOOGLE_APPLICATION_CREDENTIALS = GOOGLE_CREDENTIALS_PATH;
 
@@ -49,12 +64,30 @@ const ttsClient = new textToSpeech.TextToSpeechClient();
 
 // Create HTTP server
 const server = http.createServer((req, res) => {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+    }
+    
+    // Serve Porcupine access key
+    if (req.url === '/porcupine-key') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ key: PICOVOICE_ACCESS_KEY }));
+        return;
+    }
+    
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('WebSocket Proxy Server Running (Groq + Google TTS)\n');
+    res.end('WebSocket Proxy Server Running (Groq + Google TTS + Porcupine)\n');
 });
 
 // Create WebSocket server
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocketServer({ server });
 
 wss.on('connection', (clientWs, req) => {
     console.log('Client connected');
@@ -316,5 +349,6 @@ server.listen(PORT, () => {
     console.log(`✓ WebSocket Proxy Server running on ws://localhost:${PORT}`);
     console.log(`✓ Groq API Key loaded: ${GROQ_API_KEY.substring(0, 10)}...`);
     console.log(`✓ Google Credentials: ${GOOGLE_CREDENTIALS_PATH}`);
-    console.log(`Ready to proxy STT (Groq) and TTS (Google)`);
+    console.log(`✓ Picovoice Access Key loaded: ${PICOVOICE_ACCESS_KEY.substring(0, 10)}...`);
+    console.log(`Ready to proxy STT (Groq), TTS (Google), and Porcupine wake word`);
 });

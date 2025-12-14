@@ -24,7 +24,7 @@ class Config {
         
         // Wake word configuration
         this.wakeWord = {
-            phrase: 'hey qplus',
+            phrase: 'hey quantum',
             sensitivity: 0.5,
             cooldownMs: 1000 // Prevent multiple rapid activations
         };
