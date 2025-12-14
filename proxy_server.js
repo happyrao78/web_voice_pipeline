@@ -93,7 +93,7 @@ wss.on('connection', (clientWs, req) => {
     console.log('Client connected');
     
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const service = url.searchParams.get('service'); // 'stt' or 'tts'
+    const service = url.searchParams.get('service');
     
     if (service === 'stt') {
         handleSTTConnection(clientWs);
@@ -106,10 +106,10 @@ wss.on('connection', (clientWs, req) => {
 });
 
 /**
- * Handle STT (Groq Whisper) connection
+ * Handle STT (Groq Whisper) connection - OPTIMIZED
  */
 function handleSTTConnection(clientWs) {
-    console.log('STT service connected (Groq Whisper)');
+    console.log('STT service connected (Groq Whisper - Optimized)');
     
     let audioBuffer = [];
     let isTranscribing = false;
@@ -134,29 +134,35 @@ function handleSTTConnection(clientWs) {
                     break;
                     
                 case 'transcribe':
-                    // Transcribe accumulated audio
+                    // Transcribe accumulated audio IMMEDIATELY
                     if (!isTranscribing && audioBuffer.length > 0) {
                         isTranscribing = true;
                         
+                        const startTime = Date.now();
                         const audioBlob = Buffer.concat(audioBuffer);
-                        audioBuffer = []; // Clear buffer
+                        audioBuffer = []; // Clear buffer immediately
                         
-                        try {
-                            const transcript = await transcribeWithGroq(audioBlob);
-                            
-                            clientWs.send(JSON.stringify({
-                                type: 'transcript',
-                                text: transcript
-                            }));
-                        } catch (error) {
-                            console.error('Transcription error:', error);
-                            clientWs.send(JSON.stringify({
-                                type: 'error',
-                                message: error.message
-                            }));
-                        }
-                        
-                        isTranscribing = false;
+                        // Start transcription WITHOUT waiting
+                        transcribeWithGroq(audioBlob)
+                            .then(transcript => {
+                                const transcriptionTime = Date.now() - startTime;
+                                console.log(`✅ Groq transcription completed in ${transcriptionTime}ms`);
+                                
+                                clientWs.send(JSON.stringify({
+                                    type: 'transcript',
+                                    text: transcript
+                                }));
+                            })
+                            .catch(error => {
+                                console.error('Transcription error:', error);
+                                clientWs.send(JSON.stringify({
+                                    type: 'error',
+                                    message: error.message
+                                }));
+                            })
+                            .finally(() => {
+                                isTranscribing = false;
+                            });
                     }
                     break;
             }
@@ -171,10 +177,10 @@ function handleSTTConnection(clientWs) {
 }
 
 /**
- * Handle TTS (Google Wavenet) connection
+ * Handle TTS (Google Wavenet) connection - OPTIMIZED
  */
 function handleTTSConnection(clientWs) {
-    console.log('TTS service connected (Google Wavenet)');
+    console.log('TTS service connected (Google Wavenet - Optimized)');
     
     clientWs.on('message', async (data) => {
         try {
@@ -191,9 +197,13 @@ function handleTTSConnection(clientWs) {
                     
                 case 'speak':
                     const text = message.text;
+                    const startTime = Date.now();
                     
                     try {
-                        await synthesizeWithGoogle(text, clientWs);
+                        await synthesizeWithGoogleOptimized(text, clientWs);
+                        
+                        const synthesisTime = Date.now() - startTime;
+                        console.log(`✅ Google TTS completed in ${synthesisTime}ms`);
                         
                         // Send completion
                         clientWs.send(JSON.stringify({
@@ -219,7 +229,7 @@ function handleTTSConnection(clientWs) {
 }
 
 /**
- * Transcribe audio using Groq Whisper API
+ * Transcribe audio using Groq Whisper API - OPTIMIZED
  */
 async function transcribeWithGroq(audioBuffer) {
     return new Promise((resolve, reject) => {
@@ -232,9 +242,10 @@ async function transcribeWithGroq(audioBuffer) {
             filename: 'audio.wav',
             contentType: 'audio/wav'
         });
-        form.append('model', 'whisper-large-v3');
+        form.append('model', 'whisper-large-v3-turbo'); // TURBO model for speed
         form.append('language', 'en');
         form.append('response_format', 'json');
+        form.append('temperature', '0'); // Deterministic for speed
         
         const options = {
             hostname: 'api.groq.com',
@@ -267,34 +278,41 @@ async function transcribeWithGroq(audioBuffer) {
             reject(error);
         });
         
+        // Set timeout for faster failure
+        req.setTimeout(5000, () => {
+            req.destroy();
+            reject(new Error('Groq API timeout'));
+        });
+        
         form.pipe(req);
     });
 }
 
 /**
- * Synthesize speech using Google Cloud TTS
+ * Synthesize speech using Google Cloud TTS - OPTIMIZED
  */
-async function synthesizeWithGoogle(text, clientWs) {
+async function synthesizeWithGoogleOptimized(text, clientWs) {
     const request = {
         input: { text: text },
         voice: {
             languageCode: 'en-US',
-            name: 'en-US-Wavenet-F',
+            name: 'en-US-Standard-F', // Standard instead of Wavenet for speed
             ssmlGender: 'FEMALE'
         },
         audioConfig: {
             audioEncoding: 'LINEAR16',
             sampleRateHertz: 16000,
-            speakingRate: 1.0,
+            speakingRate: 1.15, // Slightly faster speaking
             pitch: 0.0
         }
     };
     
+    // Get audio immediately
     const [response] = await ttsClient.synthesizeSpeech(request);
-    
-    // Stream audio in chunks for lower latency
     const audioContent = response.audioContent;
-    const chunkSize = 1600; // ~100ms at 16kHz
+    
+    // Stream in SMALLER chunks for even lower latency
+    const chunkSize = 800; // ~50ms at 16kHz (reduced from 1600)
     
     for (let i = 0; i < audioContent.length; i += chunkSize) {
         const chunk = audioContent.slice(i, i + chunkSize);
@@ -304,8 +322,8 @@ async function synthesizeWithGoogle(text, clientWs) {
             data: chunk.toString('base64')
         }));
         
-        // Small delay for streaming effect
-        await new Promise(resolve => setTimeout(resolve, 20));
+        // Minimal delay for streaming (reduced from 20ms to 10ms)
+        await new Promise(resolve => setTimeout(resolve, 10));
     }
 }
 
@@ -330,8 +348,8 @@ function createWavFile(pcmData) {
     
     // fmt chunk
     header.write('fmt ', 12);
-    header.writeUInt32LE(16, 16); // chunk size
-    header.writeUInt16LE(1, 20); // audio format (PCM)
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
     header.writeUInt16LE(numChannels, 22);
     header.writeUInt32LE(sampleRate, 24);
     header.writeUInt32LE(byteRate, 28);
@@ -350,5 +368,6 @@ server.listen(PORT, () => {
     console.log(`✓ Groq API Key loaded: ${GROQ_API_KEY.substring(0, 10)}...`);
     console.log(`✓ Google Credentials: ${GOOGLE_CREDENTIALS_PATH}`);
     console.log(`✓ Picovoice Access Key loaded: ${PICOVOICE_ACCESS_KEY.substring(0, 10)}...`);
-    console.log(`Ready to proxy STT (Groq), TTS (Google), and Porcupine wake word`);
+    console.log(`✓ OPTIMIZED for ultra-low latency (<800ms target)`);
+    console.log(`Ready to proxy STT (Groq Turbo), TTS (Google Standard), and Porcupine`);
 });
