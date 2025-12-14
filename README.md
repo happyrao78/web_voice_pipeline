@@ -810,8 +810,9 @@ Target: <800ms | Warning: <1200ms | Critical: <1500ms
 
 ## Demo Video
 
-**Video Demonstration**: 
-<video controls src="https://res.cloudinary.com/dxgpsybjw/video/upload/v1765739125/20251214_230328_kcbrxq.mp4" title="Web_Voice_Agent">Demo Video</video>
+**Full End-to-End Demo (Wake Word → STT → KB → TTS)**  
+https://res.cloudinary.com/dxgpsybjw/video/upload/v1765739125/20251214_230328_kcbrxq.mp4
+
 
 **Video Content**:
 - Complete interaction flow demonstration
