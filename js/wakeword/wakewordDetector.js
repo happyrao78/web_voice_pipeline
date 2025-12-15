@@ -1,8 +1,3 @@
-/**
- * Wake Word Detector
- * Detects "Hey Quantum" using Picovoice Porcupine with WebVoiceProcessor
- */
-
 import config from '../config.js';
 
 class WakeWordDetector {
@@ -15,15 +10,13 @@ class WakeWordDetector {
         this.accessKey = null;
     }
     
-    /**
-     * Initialize wake word detector with Porcupine
-     */
+
     async initialize() {
         try {
-            // Wait for libraries to load from CDN
+            
             await this.waitForLibraries();
             
-            // Fetch Porcupine access key from proxy server
+            
             const response = await fetch('http://localhost:8080/porcupine-key');
             const data = await response.json();
             this.accessKey = data.key;
@@ -34,27 +27,26 @@ class WakeWordDetector {
             
             console.log('Porcupine access key loaded');
             
-            // Get PorcupineWorker from global window object
+            
             const { PorcupineWorker } = window.PorcupineWeb;
             
-            // Create keyword model object
+            
             const keywordModel = {
                 publicPath: "Hey-Quantum_en_wasm_v4_0_0.ppn",
                 label: "hey quantum"
             };
             
-            // Detection callback
+           
             const detectionCallback = (detection) => {
                 console.log('Porcupine detected:', detection.label);
                 this.handleWakeWordDetected();
             };
             
-            // Create model parameter
+            
             const modelParams = {
                 publicPath: "porcupine_params.pv"
             };
             
-            // Initialize Porcupine
             this.porcupineWorker = await PorcupineWorker.create(
                 this.accessKey,
                 [keywordModel],
@@ -73,9 +65,7 @@ class WakeWordDetector {
         }
     }
     
-    /**
-     * Wait for Porcupine and WebVoiceProcessor libraries to load from CDN
-     */
+
     async waitForLibraries() {
         let attempts = 0;
         const maxAttempts = 100;
@@ -96,9 +86,7 @@ class WakeWordDetector {
         console.log('✅ Porcupine and WebVoiceProcessor libraries loaded from CDN');
     }
     
-    /**
-     * Start listening for wake word
-     */
+
     async start(onDetectedCallback) {
         if (!this.isInitialized) {
             console.error('Porcupine not initialized');
@@ -108,16 +96,13 @@ class WakeWordDetector {
         this.isListening = true;
         this.onWakeWordDetected = onDetectedCallback;
         
-        // Subscribe to WebVoiceProcessor
         const { WebVoiceProcessor } = window.WebVoiceProcessor;
         await WebVoiceProcessor.subscribe(this.porcupineWorker);
         
         console.log('✅ Wake word detector started and subscribed to WebVoiceProcessor');
     }
     
-    /**
-     * Stop listening for wake word
-     */
+
     async stop() {
         if (!this.isInitialized) {
             return;
@@ -126,7 +111,6 @@ class WakeWordDetector {
         this.isListening = false;
         this.onWakeWordDetected = null;
         
-        // Unsubscribe from WebVoiceProcessor
         try {
             const { WebVoiceProcessor } = window.WebVoiceProcessor;
             await WebVoiceProcessor.unsubscribe(this.porcupineWorker);
@@ -136,48 +120,30 @@ class WakeWordDetector {
         }
     }
     
-    /**
-     * Process audio data - NOT USED (WebVoiceProcessor handles this)
-     */
-    processAudio(audioData) {
-        // WebVoiceProcessor automatically feeds audio to Porcupine
-        // This method is kept for compatibility but not used
-    }
     
-    /**
-     * Handle wake word detection
-     */
     handleWakeWordDetected() {
         if (!this.isListening) {
             return;
         }
         
-        // Check cooldown
         if (Date.now() < this.cooldownUntil) {
             return;
         }
         
         console.log('✅ Wake word "Hey Quantum" detected!');
         
-        // Set cooldown to prevent multiple rapid detections
         this.cooldownUntil = Date.now() + config.wakeWord.cooldownMs;
         
-        // Notify callback
         if (this.onWakeWordDetected) {
             this.onWakeWordDetected();
         }
     }
     
-    /**
-     * Check if currently listening
-     */
     isActive() {
         return this.isListening;
     }
     
-    /**
-     * Cleanup resources
-     */
+
     async cleanup() {
         await this.stop();
         

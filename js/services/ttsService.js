@@ -1,24 +1,16 @@
-/**
- * Text-to-Speech Service
- * Uses Google Cloud Wavenet via proxy
- */
-
 class TTSService {
     constructor() {
         this.ws = null;
         this.isConnected = false;
         this.isSpeaking = false;
         
-        // Callbacks
         this.onAudioChunk = null;
         this.onSpeechStarted = null;
         this.onSpeechEnded = null;
         this.onError = null;
     }
     
-    /**
-     * Connect to proxy server
-     */
+
     async connect() {
         return new Promise((resolve, reject) => {
             try {
@@ -30,7 +22,7 @@ class TTSService {
                 this.ws.onopen = () => {
                     console.log('✅ TTS WebSocket connected to proxy');
                     
-                    // Send start message
+                
                     this.send({ type: 'start' });
                 };
                 
@@ -57,9 +49,7 @@ class TTSService {
         });
     }
     
-    /**
-     * Handle incoming messages
-     */
+
     handleMessage(data, resolvePromise, rejectPromise) {
         try {
             const message = JSON.parse(data);
@@ -75,12 +65,12 @@ class TTSService {
                     break;
                     
                 case 'audio':
-                    // Streaming audio chunk
+                    
                     if (message.data && this.onAudioChunk) {
                         const audioData = this.base64ToArrayBuffer(message.data);
                         this.onAudioChunk(audioData);
                         
-                        // Start speaking on first chunk
+                        
                         if (!this.isSpeaking) {
                             this.isSpeaking = true;
                             if (this.onSpeechStarted) {
@@ -119,9 +109,7 @@ class TTSService {
         }
     }
     
-    /**
-     * Synthesize text to speech
-     */
+
     speak(text) {
         if (!this.isConnected || !this.ws) {
             console.warn('Cannot speak: not connected');
@@ -136,9 +124,7 @@ class TTSService {
         });
     }
     
-    /**
-     * Send message via WebSocket
-     */
+
     send(message) {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             return;
@@ -151,9 +137,7 @@ class TTSService {
         }
     }
     
-    /**
-     * Set callbacks
-     */
+
     setCallbacks({ onAudioChunk, onSpeechStarted, onSpeechEnded, onError }) {
         this.onAudioChunk = onAudioChunk;
         this.onSpeechStarted = onSpeechStarted;
@@ -161,9 +145,7 @@ class TTSService {
         this.onError = onError;
     }
     
-    /**
-     * Disconnect from service
-     */
+
     disconnect() {
         if (this.ws) {
             this.ws.close();
@@ -172,10 +154,7 @@ class TTSService {
         this.isConnected = false;
         this.isSpeaking = false;
     }
-    
-    /**
-     * Convert base64 to ArrayBuffer
-     */
+
     base64ToArrayBuffer(base64) {
         const binaryString = atob(base64);
         const bytes = new Uint8Array(binaryString.length);
@@ -185,16 +164,12 @@ class TTSService {
         return bytes.buffer;
     }
     
-    /**
-     * Check if connected
-     */
+
     isActive() {
         return this.isConnected;
     }
     
-    /**
-     * Check if currently speaking
-     */
+
     isSpeakingNow() {
         return this.isSpeaking;
     }

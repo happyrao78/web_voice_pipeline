@@ -15,7 +15,6 @@
 
         <main>
 
-            <!-- Control Section -->
             <section class="controls">
                 <button id="startBtn" class="btn-primary" disabled>
                     <span class="btn-icon">▶</span>
@@ -27,7 +26,6 @@
                 </button>
             </section>
 
-            <!-- Status Section -->
             <section class="status-section">
                 <div class="status-badge" id="statusBadge">
                     <span class="status-dot"></span>
@@ -38,8 +36,6 @@
                     <span class="latency-value">-- ms</span>
                 </div>
             </section>
-
-            <!-- Transcript Section -->
             <section class="transcript-section">
                 <h2>Transcript</h2>
                 <div class="transcript-box" id="transcriptBox">
@@ -49,7 +45,7 @@
                 </div>
             </section>
 
-            <!-- Response Section -->
+        
             <section class="response-section">
                 <h2>Assistant Response</h2>
                 <div class="response-box" id="responseBox">
@@ -59,7 +55,7 @@
                 </div>
             </section>
 
-            <!-- Debug Console (Optional) -->
+            
             <section class="debug-section" id="debugSection" style="display: none;">
                 <h2>Debug Console</h2>
                 <div class="debug-box" id="debugBox"></div>
@@ -71,11 +67,9 @@
         </footer>
     </div>
 
-    <!-- Load Porcupine from CDN first (version 4.0.0 to match .ppn file) -->
     <script src="https://unpkg.com/@picovoice/porcupine-web@4.0.0/dist/iife/index.js"></script>
     <script src="https://unpkg.com/@picovoice/web-voice-processor@4.0.0/dist/iife/index.js"></script>
     
-    <!-- Load modules -->
     <script type="module" src="js/main.js"></script>
 </body>
 </html>

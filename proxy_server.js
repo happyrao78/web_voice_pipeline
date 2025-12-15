@@ -56,15 +56,11 @@ if (!PICOVOICE_ACCESS_KEY) {
     process.exit(1);
 }
 
-// Set Google credentials
 process.env.GOOGLE_APPLICATION_CREDENTIALS = GOOGLE_CREDENTIALS_PATH;
 
-// Initialize Google TTS client
 const ttsClient = new textToSpeech.TextToSpeechClient();
 
-// Create HTTP server
 const server = http.createServer((req, res) => {
-    // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -75,7 +71,6 @@ const server = http.createServer((req, res) => {
         return;
     }
     
-    // Serve Porcupine access key
     if (req.url === '/porcupine-key') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ key: PICOVOICE_ACCESS_KEY }));
@@ -86,7 +81,7 @@ const server = http.createServer((req, res) => {
     res.end('WebSocket Proxy Server Running (Groq + Google TTS + Porcupine)\n');
 });
 
-// Create WebSocket server
+
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (clientWs, req) => {
@@ -105,9 +100,7 @@ wss.on('connection', (clientWs, req) => {
     }
 });
 
-/**
- * Handle STT (Groq Whisper) connection - OPTIMIZED
- */
+
 function handleSTTConnection(clientWs) {
     console.log('STT service connected (Groq Whisper - Optimized)');
     
@@ -120,7 +113,7 @@ function handleSTTConnection(clientWs) {
             
             switch (message.type) {
                 case 'start':
-                    // Send ready confirmation
+                    
                     clientWs.send(JSON.stringify({
                         type: 'ready',
                         message: 'Groq STT ready'
@@ -128,21 +121,21 @@ function handleSTTConnection(clientWs) {
                     break;
                     
                 case 'audio':
-                    // Accumulate audio data
+                    
                     const audioData = Buffer.from(message.audio, 'base64');
                     audioBuffer.push(audioData);
                     break;
                     
                 case 'transcribe':
-                    // Transcribe accumulated audio IMMEDIATELY
+                    
                     if (!isTranscribing && audioBuffer.length > 0) {
                         isTranscribing = true;
                         
                         const startTime = Date.now();
                         const audioBlob = Buffer.concat(audioBuffer);
-                        audioBuffer = []; // Clear buffer immediately
+                        audioBuffer = []; 
                         
-                        // Start transcription WITHOUT waiting
+                        
                         transcribeWithGroq(audioBlob)
                             .then(transcript => {
                                 const transcriptionTime = Date.now() - startTime;
@@ -176,9 +169,7 @@ function handleSTTConnection(clientWs) {
     });
 }
 
-/**
- * Handle TTS (Google Wavenet) connection - OPTIMIZED
- */
+
 function handleTTSConnection(clientWs) {
     console.log('TTS service connected (Google Wavenet - Optimized)');
     
@@ -188,7 +179,7 @@ function handleTTSConnection(clientWs) {
             
             switch (message.type) {
                 case 'start':
-                    // Send ready confirmation
+                
                     clientWs.send(JSON.stringify({
                         type: 'ready',
                         message: 'Google TTS ready'
@@ -205,7 +196,7 @@ function handleTTSConnection(clientWs) {
                         const synthesisTime = Date.now() - startTime;
                         console.log(`✅ Google TTS completed in ${synthesisTime}ms`);
                         
-                        // Send completion
+                    
                         clientWs.send(JSON.stringify({
                             type: 'done'
                         }));
@@ -228,24 +219,21 @@ function handleTTSConnection(clientWs) {
     });
 }
 
-/**
- * Transcribe audio using Groq Whisper API - OPTIMIZED
- */
+
 async function transcribeWithGroq(audioBuffer) {
     return new Promise((resolve, reject) => {
         const form = new FormData();
         
-        // Convert raw PCM to WAV
         const wavBuffer = createWavFile(audioBuffer);
         
         form.append('file', wavBuffer, {
             filename: 'audio.wav',
             contentType: 'audio/wav'
         });
-        form.append('model', 'whisper-large-v3-turbo'); // TURBO model for speed
+        form.append('model', 'whisper-large-v3-turbo'); 
         form.append('language', 'en');
         form.append('response_format', 'json');
-        form.append('temperature', '0'); // Deterministic for speed
+        form.append('temperature', '0'); 
         
         const options = {
             hostname: 'api.groq.com',
@@ -278,7 +266,7 @@ async function transcribeWithGroq(audioBuffer) {
             reject(error);
         });
         
-        // Set timeout for faster failure
+
         req.setTimeout(5000, () => {
             req.destroy();
             reject(new Error('Groq API timeout'));
@@ -288,31 +276,27 @@ async function transcribeWithGroq(audioBuffer) {
     });
 }
 
-/**
- * Synthesize speech using Google Cloud TTS - OPTIMIZED
- */
+
 async function synthesizeWithGoogleOptimized(text, clientWs) {
     const request = {
         input: { text: text },
         voice: {
             languageCode: 'en-US',
-            name: 'en-US-Standard-F', // Standard instead of Wavenet for speed
+            name: 'en-US-Standard-F', 
             ssmlGender: 'FEMALE'
         },
         audioConfig: {
             audioEncoding: 'LINEAR16',
             sampleRateHertz: 16000,
-            speakingRate: 1.15, // Slightly faster speaking
+            speakingRate: 1.15, 
             pitch: 0.0
         }
     };
     
-    // Get audio immediately
     const [response] = await ttsClient.synthesizeSpeech(request);
     const audioContent = response.audioContent;
     
-    // Stream in SMALLER chunks for even lower latency
-    const chunkSize = 800; // ~50ms at 16kHz (reduced from 1600)
+    const chunkSize = 800; 
     
     for (let i = 0; i < audioContent.length; i += chunkSize) {
         const chunk = audioContent.slice(i, i + chunkSize);
@@ -322,14 +306,10 @@ async function synthesizeWithGoogleOptimized(text, clientWs) {
             data: chunk.toString('base64')
         }));
         
-        // Minimal delay for streaming (reduced from 20ms to 10ms)
         await new Promise(resolve => setTimeout(resolve, 10));
     }
 }
 
-/**
- * Create WAV file from PCM data
- */
 function createWavFile(pcmData) {
     const sampleRate = 16000;
     const numChannels = 1;
@@ -341,12 +321,12 @@ function createWavFile(pcmData) {
     
     const header = Buffer.alloc(44);
     
-    // RIFF header
+    
     header.write('RIFF', 0);
     header.writeUInt32LE(36 + dataSize, 4);
     header.write('WAVE', 8);
     
-    // fmt chunk
+
     header.write('fmt ', 12);
     header.writeUInt32LE(16, 16);
     header.writeUInt16LE(1, 20);
@@ -356,7 +336,6 @@ function createWavFile(pcmData) {
     header.writeUInt16LE(blockAlign, 32);
     header.writeUInt16LE(bitsPerSample, 34);
     
-    // data chunk
     header.write('data', 36);
     header.writeUInt32LE(dataSize, 40);
     

@@ -1,8 +1,3 @@
-/**
- * Knowledge Base Service (Optimized)
- * Handles local question-answer lookups with better fuzzy matching
- */
-
 class KnowledgeBase {
     constructor() {
         this.data = {};
@@ -11,9 +6,7 @@ class KnowledgeBase {
         this.isLoaded = false;
     }
     
-    /**
-     * Load knowledge base from JSON file
-     */
+
     async load() {
         try {
             const response = await fetch('knowledge_base.json');
@@ -23,7 +16,6 @@ class KnowledgeBase {
             
             this.data = await response.json();
             
-            // Create normalized version and extract keywords
             this.normalizedData = {};
             this.keywords = {};
             
@@ -34,10 +26,9 @@ class KnowledgeBase {
                     answer: value
                 };
                 
-                // Extract keywords
                 const words = normalizedKey.split(' ');
                 for (const word of words) {
-                    if (word.length > 2) { // Skip very short words
+                    if (word.length > 2) { 
                         if (!this.keywords[word]) {
                             this.keywords[word] = [];
                         }
@@ -55,20 +46,15 @@ class KnowledgeBase {
         }
     }
     
-    /**
-     * Normalize text for matching
-     */
+
     normalize(text) {
         return text
             .toLowerCase()
             .trim()
-            .replace(/[.,!?;:'"]/g, '') // Remove punctuation
-            .replace(/\s+/g, ' '); // Normalize whitespace
+            .replace(/[.,!?;:'"]/g, '') 
+            .replace(/\s+/g, ' '); 
     }
     
-    /**
-     * Calculate similarity using Levenshtein distance
-     */
     calculateLevenshtein(str1, str2) {
         const len1 = str1.length;
         const len2 = str2.length;
@@ -98,9 +84,7 @@ class KnowledgeBase {
         return 1 - (distance / maxLen);
     }
     
-    /**
-     * Find answer for a question using multiple strategies
-     */
+
     find(question) {
         if (!this.isLoaded) {
             console.warn('Knowledge base not loaded');
@@ -109,13 +93,11 @@ class KnowledgeBase {
         
         const normalized = this.normalize(question);
         
-        // Strategy 1: Exact match
         if (this.normalizedData[normalized]) {
             console.log('✓ Exact match found');
             return this.normalizedData[normalized].answer;
         }
         
-        // Strategy 2: Contains match
         for (const [key, value] of Object.entries(this.normalizedData)) {
             if (normalized.includes(key) || key.includes(normalized)) {
                 console.log('✓ Contains match found');
@@ -123,7 +105,6 @@ class KnowledgeBase {
             }
         }
         
-        // Strategy 3: Keyword matching
         const queryWords = normalized.split(' ').filter(w => w.length > 2);
         const candidates = new Set();
         
@@ -134,7 +115,6 @@ class KnowledgeBase {
         }
         
         if (candidates.size > 0) {
-            // Find best match among candidates
             let bestMatch = null;
             let bestScore = 0;
             
@@ -152,7 +132,6 @@ class KnowledgeBase {
             }
         }
         
-        // Strategy 4: Fuzzy match with all entries
         let bestMatch = null;
         let bestScore = 0;
         const threshold = 0.5;
@@ -171,36 +150,25 @@ class KnowledgeBase {
             return bestMatch;
         }
         
-        // No match found
         console.log('✗ No match found');
         return null;
     }
     
-    /**
-     * Get default response for unknown questions
-     */
     getDefaultResponse() {
         return "I'm sorry, I don't have information about that. Please try asking about Qplus or Quantum Strides.";
     }
     
-    /**
-     * Get answer with fallback
-     */
     getAnswer(question) {
         const answer = this.find(question);
         return answer || this.getDefaultResponse();
     }
     
-    /**
-     * Check if loaded
-     */
+
     isReady() {
         return this.isLoaded;
     }
     
-    /**
-     * Get all questions
-     */
+
     getAllQuestions() {
         return Object.keys(this.data);
     }
